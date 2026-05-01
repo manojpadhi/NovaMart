@@ -1,32 +1,72 @@
 const express = require('express');
-const router  = express.Router();
-const fetch   = require('node-fetch');
+const router = express.Router();
+const fetch = require('node-fetch');
+const multer = require('multer');
+const FormData = require('form-data');
 
-// POST /api/ai/chat
+const upload = multer({ storage: multer.memoryStorage() });
+
+// POST /api/ai/chat  — Sarvam Chat Completion
 router.post('/chat', async (req, res) => {
   try {
     const { messages, product } = req.body;
-    const apiKey = process.env.ANTHROPIC_API_KEY;
+    const apiKey = process.env.SARVAM_API_KEY;
 
-    if (!apiKey || apiKey.includes('YOUR_KEY')) {
-      return res.json({ reply: '⚠️ AI not configured. Add your Anthropic API key in backend/.env to enable AI chat. Get a free key at console.anthropic.com' });
+    if (!apiKey) {
+      return res.json({ reply: '⚠️ AI not configured. Add SARVAM_API_KEY in backend/.env' });
     }
 
-    const system = `You are a sharp, helpful AI shopping assistant for NovaMart, an Indian e-commerce platform.
+    const systemPrompt = `You are a sharp, helpful AI shopping assistant for NovaMart, an Indian e-commerce platform.
 ${product ? `Product: ${product.name} | Price: ₹${product.price?.toLocaleString()} (MRP ₹${product.mrp?.toLocaleString()}) | Brand: ${product.brand} | Rating: ${product.rating}/5 (${product.numReviews} reviews) | Stock: ${product.stock} | ${product.description}` : 'Help users shop wisely.'}
 Be concise (under 100 words), friendly, use bullet points for lists. Hindi-English mix is fine.`;
 
-    const response = await fetch('https://api.anthropic.com/v1/messages', {
+    const response = await fetch('https://api.sarvam.ai/v1/chat/completions', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
-      body: JSON.stringify({ model: 'claude-sonnet-4-20250514', max_tokens: 400, system, messages }),
+      headers: {
+        'Content-Type': 'application/json',
+        'api-subscription-key': apiKey,
+      },
+      body: JSON.stringify({
+        model: 'sarvam-m',
+        messages: [
+          { role: 'system', content: systemPrompt },
+          ...messages,
+        ],
+        max_tokens: 400,
+      }),
     });
 
     const data = await response.json();
-    if (data.error) return res.status(400).json({ message: data.error.message });
-    res.json({ reply: data.content[0].text });
+    if (!response.ok) return res.status(400).json({ message: data.message || 'Sarvam API error' });
+    res.json({ reply: data.choices[0].message.content });
   } catch (err) {
     res.status(500).json({ message: 'AI error: ' + err.message });
+  }
+});
+
+// POST /api/ai/transcribe  — Sarvam Speech-to-Text
+router.post('/transcribe', upload.single('file'), async (req, res) => {
+  try {
+    const apiKey = process.env.SARVAM_API_KEY;
+    if (!apiKey) return res.status(400).json({ message: 'SARVAM_API_KEY not set' });
+    if (!req.file) return res.status(400).json({ message: 'No audio file provided' });
+
+    const form = new FormData();
+    form.append('file', req.file.buffer, { filename: 'audio.wav', contentType: req.file.mimetype });
+    form.append('model', 'saaras:v3');
+    form.append('mode', 'transcribe');
+
+    const response = await fetch('https://api.sarvam.ai/v1/speech-to-text', {
+      method: 'POST',
+      headers: { 'api-subscription-key': apiKey, ...form.getHeaders() },
+      body: form,
+    });
+
+    const data = await response.json();
+    if (!response.ok) return res.status(400).json({ message: data.message || 'Transcription error' });
+    res.json({ transcript: data.transcript });
+  } catch (err) {
+    res.status(500).json({ message: 'Transcription error: ' + err.message });
   }
 });
 

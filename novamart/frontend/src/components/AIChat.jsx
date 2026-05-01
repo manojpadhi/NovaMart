@@ -8,7 +8,10 @@ export default function AIChat({ product, onClose }) {
   ])
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [recording, setRecording] = useState(false)
   const bottomRef = useRef(null)
+  const mediaRef = useRef(null)
+  const chunksRef = useRef([])
   const quickQ = ['Worth buying?', 'Any known issues?', 'Better alternatives?', 'Is the price good?']
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
@@ -30,6 +33,37 @@ export default function AIChat({ product, onClose }) {
     setLoading(false)
   }
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      chunksRef.current = []
+      const mr = new MediaRecorder(stream)
+      mediaRef.current = mr
+      mr.ondataavailable = e => chunksRef.current.push(e.data)
+      mr.onstop = async () => {
+        stream.getTracks().forEach(t => t.stop())
+        const blob = new Blob(chunksRef.current, { type: 'audio/wav' })
+        const form = new FormData()
+        form.append('file', blob, 'audio.wav')
+        try {
+          const { data } = await axios.post('/api/ai/transcribe', form, { headers: { 'Content-Type': 'multipart/form-data' } })
+          if (data.transcript) send(data.transcript)
+        } catch {
+          setMsgs(p => [...p, { role: 'assistant', content: '⚠️ Voice transcription failed. Please try again.' }])
+        }
+      }
+      mr.start()
+      setRecording(true)
+    } catch {
+      alert('Microphone access denied.')
+    }
+  }
+
+  const stopRecording = () => {
+    mediaRef.current?.stop()
+    setRecording(false)
+  }
+
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.75)', backdropFilter: 'blur(10px)', zIndex: 2000, display: 'flex', alignItems: 'center', justifyContent: 'center' }}
       onClick={e => e.target === e.currentTarget && onClose()}>
@@ -40,6 +74,7 @@ export default function AIChat({ product, onClose }) {
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <span style={{ color: T.accent, fontSize: 16 }}>◆</span>
               <span style={{ color: T.text, fontWeight: 700, fontFamily: "'Outfit',sans-serif" }}>AI Shopping Assistant</span>
+              <span style={{ fontSize: 10, color: T.muted, background: 'rgba(240,136,62,0.15)', padding: '2px 6px', borderRadius: 8 }}>Sarvam AI</span>
             </div>
             <div style={{ color: T.accent, fontSize: 11, marginTop: 2 }}>{product.image} {product.name}</div>
           </div>
@@ -73,6 +108,12 @@ export default function AIChat({ product, onClose }) {
             placeholder="Ask anything about this product…"
             style={{ flex: 1, padding: '10px 14px', background: '#0d1117', border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: 13, outline: 'none' }}
           />
+          <button
+            onClick={recording ? stopRecording : startRecording}
+            title={recording ? 'Stop recording' : 'Voice input'}
+            style={{ padding: '10px 13px', background: recording ? '#e53e3e' : 'rgba(240,136,62,0.15)', border: `1px solid ${recording ? '#e53e3e' : 'rgba(240,136,62,0.3)'}`, borderRadius: 10, fontSize: 15, cursor: 'pointer', animation: recording ? 'bounce 1s infinite' : 'none' }}>
+            🎤
+          </button>
           <button onClick={() => send()} style={{ padding: '10px 16px', background: T.accent, color: '#000', border: 'none', borderRadius: 10, fontSize: 15, cursor: 'pointer', fontWeight: 700 }}>→</button>
         </div>
       </div>
