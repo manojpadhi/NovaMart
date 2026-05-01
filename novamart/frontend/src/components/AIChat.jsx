@@ -9,17 +9,42 @@ export default function AIChat({ product, onClose }) {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [recording, setRecording] = useState(false)
+  const [speaking, setSpeaking] = useState(false)
+  const [voiceOn, setVoiceOn] = useState(true)   // auto-speak toggle
   const bottomRef = useRef(null)
   const mediaRef = useRef(null)
   const chunksRef = useRef([])
+  const audioRef = useRef(null)
   const quickQ = ['Worth buying?', 'Any known issues?', 'Better alternatives?', 'Is the price good?']
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }) }, [msgs])
+
+  // Play base64 WAV audio from Sarvam TTS
+  const playAudio = async (text) => {
+    try {
+      setSpeaking(true)
+      const { data } = await axios.post('/api/ai/speak', { text })
+      const audio = new Audio(`data:audio/wav;base64,${data.audio}`)
+      audioRef.current = audio
+      audio.onended = () => setSpeaking(false)
+      audio.onerror = () => setSpeaking(false)
+      audio.play()
+    } catch {
+      setSpeaking(false)
+    }
+  }
+
+  const stopAudio = () => {
+    audioRef.current?.pause()
+    audioRef.current = null
+    setSpeaking(false)
+  }
 
   const send = async (text) => {
     const q = (text || input).trim()
     if (!q || loading) return
     setInput('')
+    stopAudio()
     const newMsgs = [...msgs, { role: 'user', content: q }]
     setMsgs(newMsgs)
     setLoading(true)
@@ -27,14 +52,17 @@ export default function AIChat({ product, onClose }) {
       const apiMsgs = newMsgs.filter((_, i) => i > 0).map(m => ({ role: m.role, content: m.content }))
       const { data } = await axios.post('/api/ai/chat', { messages: apiMsgs, product })
       setMsgs(p => [...p, { role: 'assistant', content: data.reply }])
+      if (voiceOn) playAudio(data.reply)
     } catch {
       setMsgs(p => [...p, { role: 'assistant', content: '⚠️ Error connecting. Please try again.' }])
     }
     setLoading(false)
   }
 
+  // --- Voice Input (STT) ---
   const startRecording = async () => {
     try {
+      stopAudio()
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       chunksRef.current = []
       const mr = new MediaRecorder(stream)
@@ -69,6 +97,7 @@ export default function AIChat({ product, onClose }) {
       onClick={e => e.target === e.currentTarget && onClose()}>
       <div style={{ width: 'min(520px,95vw)', maxHeight: '85vh', background: '#161b22', borderRadius: 16, border: `1px solid rgba(240,136,62,0.35)`, display: 'flex', flexDirection: 'column', overflow: 'hidden', boxShadow: '0 24px 64px rgba(0,0,0,0.8)' }}>
 
+        {/* Header */}
         <div style={{ padding: '16px 20px', borderBottom: `1px solid ${T.border}`, background: 'rgba(240,136,62,0.07)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
           <div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -78,21 +107,39 @@ export default function AIChat({ product, onClose }) {
             </div>
             <div style={{ color: T.accent, fontSize: 11, marginTop: 2 }}>{product.image} {product.name}</div>
           </div>
-          <button onClick={onClose} style={{ background: 'none', border: 'none', color: T.muted, fontSize: 18, cursor: 'pointer' }}>✕</button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            {/* Auto-speak toggle */}
+            <button onClick={() => { setVoiceOn(v => !v); stopAudio() }}
+              title={voiceOn ? 'Mute AI voice' : 'Unmute AI voice'}
+              style={{ background: 'none', border: 'none', fontSize: 16, cursor: 'pointer', opacity: voiceOn ? 1 : 0.4 }}>
+              {voiceOn ? '🔊' : '🔇'}
+            </button>
+            <button onClick={onClose} style={{ background: 'none', border: 'none', color: T.muted, fontSize: 18, cursor: 'pointer' }}>✕</button>
+          </div>
         </div>
 
+        {/* Quick questions */}
         <div style={{ padding: '8px 14px', borderBottom: `1px solid ${T.border}`, display: 'flex', gap: 5, flexWrap: 'wrap' }}>
           {quickQ.map(q => (
             <button key={q} onClick={() => send(q)} style={{ padding: '3px 9px', background: 'rgba(240,136,62,0.1)', border: '1px solid rgba(240,136,62,0.3)', color: T.accent, borderRadius: 20, fontSize: 11, cursor: 'pointer' }}>{q}</button>
           ))}
         </div>
 
+        {/* Messages */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
           {msgs.map((m, i) => (
-            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start' }}>
+            <div key={i} style={{ display: 'flex', justifyContent: m.role === 'user' ? 'flex-end' : 'flex-start', alignItems: 'flex-end', gap: 6 }}>
               <div style={{ maxWidth: '84%', padding: '10px 14px', background: m.role === 'user' ? T.accent : '#0d1117', color: m.role === 'user' ? '#000' : T.text, borderRadius: m.role === 'user' ? '16px 16px 4px 16px' : '16px 16px 16px 4px', fontSize: 13, lineHeight: 1.6, border: m.role !== 'user' ? `1px solid ${T.border}` : 'none', whiteSpace: 'pre-wrap' }}>
                 {m.content}
               </div>
+              {/* Replay speaker button on AI messages */}
+              {m.role === 'assistant' && i > 0 && (
+                <button onClick={() => speaking ? stopAudio() : playAudio(m.content)}
+                  title={speaking ? 'Stop' : 'Play aloud'}
+                  style={{ background: 'none', border: 'none', fontSize: 13, cursor: 'pointer', opacity: 0.6, padding: '0 2px', flexShrink: 0 }}>
+                  {speaking ? '⏹' : '🔈'}
+                </button>
+              )}
             </div>
           ))}
           {loading && (
@@ -100,19 +147,28 @@ export default function AIChat({ product, onClose }) {
               {[0,1,2].map(i => <div key={i} style={{ width: 7, height: 7, borderRadius: '50%', background: T.accent, animation: `bounce 1s ${i*0.15}s infinite` }} />)}
             </div>
           )}
+          {/* Speaking indicator */}
+          {speaking && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, color: T.accent, fontSize: 11 }}>
+              <span style={{ animation: 'bounce 1s infinite' }}>🔊</span> Speaking…
+              <button onClick={stopAudio} style={{ background: 'none', border: 'none', color: T.muted, fontSize: 11, cursor: 'pointer' }}>stop</button>
+            </div>
+          )}
           <div ref={bottomRef} />
         </div>
 
+        {/* Input bar */}
         <div style={{ padding: '10px 14px', borderTop: `1px solid ${T.border}`, display: 'flex', gap: 8 }}>
           <input value={input} onChange={e => setInput(e.target.value)} onKeyDown={e => e.key === 'Enter' && send()}
-            placeholder="Ask anything about this product…"
-            style={{ flex: 1, padding: '10px 14px', background: '#0d1117', border: `1px solid ${T.border}`, borderRadius: 10, color: T.text, fontSize: 13, outline: 'none' }}
+            placeholder={recording ? '🎤 Listening… click mic to send' : 'Ask anything about this product…'}
+            style={{ flex: 1, padding: '10px 14px', background: '#0d1117', border: `1px solid ${recording ? T.accent : T.border}`, borderRadius: 10, color: T.text, fontSize: 13, outline: 'none', transition: 'border 0.2s' }}
           />
+          {/* Mic button */}
           <button
             onClick={recording ? stopRecording : startRecording}
-            title={recording ? 'Stop recording' : 'Voice input'}
-            style={{ padding: '10px 13px', background: recording ? '#e53e3e' : 'rgba(240,136,62,0.15)', border: `1px solid ${recording ? '#e53e3e' : 'rgba(240,136,62,0.3)'}`, borderRadius: 10, fontSize: 15, cursor: 'pointer', animation: recording ? 'bounce 1s infinite' : 'none' }}>
-            🎤
+            title={recording ? 'Stop & send voice' : 'Start voice input'}
+            style={{ padding: '10px 13px', background: recording ? 'rgba(229,62,62,0.2)' : 'rgba(240,136,62,0.15)', border: `1px solid ${recording ? '#e53e3e' : 'rgba(240,136,62,0.3)'}`, borderRadius: 10, fontSize: 15, cursor: 'pointer', transition: 'all 0.2s' }}>
+            {recording ? '⏹' : '🎤'}
           </button>
           <button onClick={() => send()} style={{ padding: '10px 16px', background: T.accent, color: '#000', border: 'none', borderRadius: 10, fontSize: 15, cursor: 'pointer', fontWeight: 700 }}>→</button>
         </div>

@@ -44,6 +44,38 @@ Be concise (under 100 words), friendly, use bullet points for lists. Hindi-Engli
   }
 });
 
+// POST /api/ai/speak  — Sarvam Text-to-Speech
+router.post('/speak', async (req, res) => {
+  try {
+    const apiKey = process.env.SARVAM_API_KEY;
+    if (!apiKey) return res.status(400).json({ message: 'SARVAM_API_KEY not set' });
+
+    const { text } = req.body;
+    if (!text) return res.status(400).json({ message: 'No text provided' });
+
+    // Strip markdown bold/bullets for cleaner speech
+    const clean = text.replace(/\*\*/g, '').replace(/^[•\-*] /gm, '').slice(0, 500);
+
+    const response = await fetch('https://api.sarvam.ai/text-to-speech', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'api-subscription-key': apiKey },
+      body: JSON.stringify({
+        inputs: [clean],
+        target_language_code: 'hi-IN',
+        speaker: 'meera',
+        model: 'bulbul:v1',
+        enable_preprocessing: true,
+      }),
+    });
+
+    const data = await response.json();
+    if (!response.ok) return res.status(400).json({ message: data.message || 'TTS error' });
+    res.json({ audio: data.audios[0] }); // base64 WAV
+  } catch (err) {
+    res.status(500).json({ message: 'TTS error: ' + err.message });
+  }
+});
+
 // POST /api/ai/transcribe  — Sarvam Speech-to-Text
 router.post('/transcribe', upload.single('file'), async (req, res) => {
   try {
