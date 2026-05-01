@@ -65,19 +65,26 @@ export default function AIChat({ product, onClose }) {
       stopAudio()
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
       chunksRef.current = []
-      const mr = new MediaRecorder(stream)
+      // Pick a mime type Sarvam accepts; prefer webm, fallback to default
+      const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+        ? 'audio/webm;codecs=opus'
+        : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : ''
+      const mr = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream)
       mediaRef.current = mr
       mr.ondataavailable = e => chunksRef.current.push(e.data)
       mr.onstop = async () => {
         stream.getTracks().forEach(t => t.stop())
-        const blob = new Blob(chunksRef.current, { type: 'audio/wav' })
+        const actualMime = mr.mimeType || 'audio/webm'
+        const blob = new Blob(chunksRef.current, { type: actualMime })
         const form = new FormData()
-        form.append('file', blob, 'audio.wav')
+        form.append('file', blob, 'audio.webm')
         try {
           const { data } = await axios.post('/api/ai/transcribe', form, { headers: { 'Content-Type': 'multipart/form-data' } })
           if (data.transcript) send(data.transcript)
-        } catch {
-          setMsgs(p => [...p, { role: 'assistant', content: '⚠️ Voice transcription failed. Please try again.' }])
+          else setMsgs(p => [...p, { role: 'assistant', content: '⚠️ Could not understand audio. Please try again.' }])
+        } catch (err) {
+          const msg = err.response?.data?.message || 'Voice transcription failed.'
+          setMsgs(p => [...p, { role: 'assistant', content: `⚠️ ${msg}` }])
         }
       }
       mr.start()

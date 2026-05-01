@@ -62,7 +62,7 @@ router.post('/speak', async (req, res) => {
       body: JSON.stringify({
         inputs: [clean],
         target_language_code: 'hi-IN',
-        speaker: 'meera',
+        speaker: 'anushka',
         model: 'bulbul:v1',
         enable_preprocessing: true,
       }),
@@ -84,11 +84,14 @@ router.post('/transcribe', upload.single('file'), async (req, res) => {
     if (!req.file) return res.status(400).json({ message: 'No audio file provided' });
 
     const form = new FormData();
-    form.append('file', req.file.buffer, { filename: 'audio.wav', contentType: req.file.mimetype });
+    // Browser MediaRecorder produces webm/opus — use correct mime type
+    const mime = req.file.mimetype || 'audio/webm';
+    const ext = mime.includes('webm') ? 'audio.webm' : mime.includes('mp4') ? 'audio.mp4' : 'audio.wav';
+    form.append('file', req.file.buffer, { filename: ext, contentType: mime });
     form.append('model', 'saaras:v3');
     form.append('mode', 'transcribe');
 
-    const response = await fetch('https://api.sarvam.ai/v1/speech-to-text', {
+    const response = await fetch('https://api.sarvam.ai/speech-to-text', {
       method: 'POST',
       headers: { 'api-subscription-key': apiKey, ...form.getHeaders() },
       body: form,
