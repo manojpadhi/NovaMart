@@ -1,0 +1,37 @@
+@import url('https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=DM+Sans:wght@400;500;600;700&family=DM+Mono:wght@400;500&display=swap');
+
+:root {
+  --bg: #04080f;
+  --surface: #0d1117;
+  --card: #161b22;
+  --border: #21262d;
+  --border-h: #30363d;
+  --accent: #f0883e;
+  --accent-d: rgba(240,136,62,0.12);
+  --accent-b: rgba(240,136,62,0.35);
+  --blue: #58a6ff;
+  --blue-d: rgba(88,166,255,0.1);
+  --green: #3fb950;
+  --green-d: rgba(63,185,80,0.1);
+  --red: #f85149;
+  --red-d: rgba(248,81,73,0.1);
+  --purple: #bc8cff;
+  --purple-d: rgba(188,140,255,0.1);
+  --text: #e6edf3;
+  --muted: #8b949e;
+  --subtle: #484f58;
+}
+
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;min-height:100vh}
+::-webkit-scrollbar{width:5px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:4px}
+input,select,textarea,button{font-family:'DM Sans',sans-serif}
+a{text-decoration:none;color:inherit}
+
+@keyframes fadeUp{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideIn{from{transform:translateX(100%)}to{transform:translateX(0)}}
+@keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes toastIn{from{transform:translateX(120%);opacity:0}to{transform:translateX(0);opacity:1}}
